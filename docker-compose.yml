@@ -25,12 +25,11 @@ services:
     build: .
     container_name: tickets-s3-app
     restart: unless-stopped
-    ports:
-      - "8082:8082"
+    network_mode: host
     environment:
       SERVER_PORT: 8082
-      DB_HOST: mysql
-      DB_PORT: 3306
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3307
       DB_NAME: tickets_db
       DB_USER: ${DB_USER:-tickets_user}
       DB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en .env}
@@ -39,9 +38,6 @@ services:
       STORAGE_DIR: /app/efs-data
     volumes:
       - ${STORAGE_HOST_DIR:-./efs-data}:/app/efs-data
-    depends_on:
-      mysql:
-        condition: service_healthy
 
 volumes:
   mysql_data:

@@ -29,8 +29,9 @@ public class StorageService {
     }
 
     // Guarda temporalmente el PDF en EFS
-    public File guardarEnEfs(String nombreArchivo, byte[] contenidoBytes)
-            throws IOException {
+    public File guardarEnEfs(
+            String nombreArchivo,
+            byte[] contenidoBytes) throws IOException {
 
         Path directorio = Paths.get(efsStorageDir);
 
@@ -39,6 +40,15 @@ public class StorageService {
         Path rutaArchivo = directorio.resolve(nombreArchivo);
 
         Files.write(rutaArchivo, contenidoBytes);
+
+        return rutaArchivo.toFile();
+    }
+
+    // Recupera un PDF almacenado temporalmente en EFS
+    public File obtenerArchivoEfs(String nombreArchivo) {
+        Path rutaArchivo = Paths.get(efsStorageDir)
+                .resolve(nombreArchivo)
+                .normalize();
 
         return rutaArchivo.toFile();
     }
