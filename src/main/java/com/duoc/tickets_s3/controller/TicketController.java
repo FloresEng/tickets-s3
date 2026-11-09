@@ -53,7 +53,17 @@ public class TicketController {
             @RequestParam Long eventoId,
             @RequestParam String usuarioId,
             @RequestParam String titular,
-            @RequestParam Double precio) {
+            @RequestParam Double precio,
+            @RequestParam String tipoOperacion) {
+
+        // Validar tipo de operación
+        String operacion = tipoOperacion.trim().toUpperCase();
+
+        if (!operacion.equals("RESERVAR") && !operacion.equals("COMPRAR")) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "La operación debe ser RESERVAR o COMPRAR");
+        }
 
         Evento evento = eventoRepository.findById(eventoId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -65,28 +75,33 @@ public class TicketController {
         ticket.setUsuarioId(usuarioId);
         ticket.setTitular(titular);
         ticket.setPrecio(precio);
-        ticket.setEstado("VENDIDO");
+
+        // Asignar estado según la operación seleccionada
+        ticket.setEstado(operacion.equals("RESERVAR")
+                ? "RESERVADO"
+                : "VENDIDO");
 
         ticket = ticketRepository.save(ticket);
 
         try {
-            String nombreArchivo = "ticket_" + ticket.getId() + ".pdf";
+                String nombreArchivo = "ticket_" + ticket.getId() + ".pdf";
 
-            byte[] pdfBytes = pdfService.generarTicketPdf(ticket);
+                byte[] pdfBytes = pdfService.generarTicketPdf(ticket);
 
-            storageService.guardarEnEfs(nombreArchivo, pdfBytes);
+                storageService.guardarEnEfs(nombreArchivo, pdfBytes);
 
-            return ResponseEntity.status(HttpStatus.CREATED).body(ticket);
+                return ResponseEntity.status(HttpStatus.CREATED).body(ticket);
 
         } catch (IOException e) {
-            ticketRepository.delete(ticket);
+                ticketRepository.delete(ticket);
 
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al generar o guardar el PDF en EFS",
-                    e);
+                throw new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Error al generar o guardar el PDF en EFS",
+                        e);
         }
-    }
+        }
+
 
     // Subir un ticket previamente generado a S3
     @PostMapping("/{id}/subir-s3")
@@ -203,27 +218,31 @@ public class TicketController {
         }
         }   
 
-    // Consultar estadísticas de un evento
-    @GetMapping("/stats/evento/{eventoId}")
-    public ResponseEntity<Map<String, Object>> obtenerEstadisticasEvento(
-            @PathVariable Long eventoId) {
+    
+        // Consultar estadísticas de un evento
+        @GetMapping("/stats/evento/{eventoId}")
+        public ResponseEntity<Map<String, Object>> obtenerEstadisticasEvento(
+                @PathVariable Long eventoId) {
 
         eventoRepository.findById(eventoId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Evento no encontrado"));
+                        HttpStatus.NOT_FOUND, "Evento no encontrado"));
 
-        long totalReservas =
+        long totalReservadas =
                 ticketRepository.countReservasByEvento(eventoId);
 
-        Double totalVentas =
+        long totalVendidas =
+                ticketRepository.countVentasByEvento(eventoId);
+
+        Double totalIngresos =
                 ticketRepository.sumVentasByEvento(eventoId);
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("eventoId", eventoId);
-        stats.put("totalReservas", totalReservas);
-        stats.put("totalVentas", totalVentas);
+        stats.put("totalReservadas", totalReservadas);
+        stats.put("totalVendidas", totalVendidas);
+        stats.put("totalIngresos", totalIngresos);
 
         return ResponseEntity.ok(stats);
-    }
+        }
 }
