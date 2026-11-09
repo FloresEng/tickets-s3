@@ -1,0 +1,19 @@
+# Configuración sensible
+.env
+.env.*
+!.env.example
+
+# Maven
+target/
+
+# Archivos locales
+*.log
+efs-data/
+
+# IDE
+.idea/
+.vscode/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

@@ -1,0 +1,65 @@
+
+package com.duoc.tickets_s3.service;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+@Service
+public class StorageService {
+
+    private final S3Client s3Client;
+
+    @Value("${aws.s3.bucket}")
+    private String bucketName;
+
+    @Value("${file.storage-dir}")
+    private String efsStorageDir;
+
+    public StorageService(S3Client s3Client) {
+        this.s3Client = s3Client;
+    }
+
+    // Guarda temporalmente el PDF en EFS
+    public File guardarEnEfs(String nombreArchivo, byte[] contenidoBytes)
+            throws IOException {
+
+        Path directorio = Paths.get(efsStorageDir);
+
+        Files.createDirectories(directorio);
+
+        Path rutaArchivo = directorio.resolve(nombreArchivo);
+
+        Files.write(rutaArchivo, contenidoBytes);
+
+        return rutaArchivo.toFile();
+    }
+
+    // Sube el PDF desde EFS hacia Amazon S3
+    public String subirAS3(
+            String eventoId,
+            String usuarioId,
+            String nombreArchivo,
+            File archivo) {
+
+        String s3Key = eventoId + "/" + usuarioId + "/" + nombreArchivo;
+
+        PutObjectRequest putRequest = PutObjectRequest.builder()
+                .bucket(bucketName)
+                .key(s3Key)
+                .contentType("application/pdf")
+                .build();
+
+        s3Client.putObject(putRequest, archivo.toPath());
+
+        return "s3://" + bucketName + "/" + s3Key;
+    }
+}
