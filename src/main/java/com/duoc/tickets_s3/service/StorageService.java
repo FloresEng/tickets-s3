@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 
 import java.io.File;
 import java.io.IOException;
@@ -88,5 +89,31 @@ public class StorageService {
                 .build();
 
         return s3Client.getObjectAsBytes(getRequest).asByteArray();
+    }
+
+    // Eliminar un PDF almacenado en EFS
+    public void eliminarArchivoEfs(String nombreArchivo) throws IOException {
+
+        Path rutaArchivo = Paths.get(efsStorageDir)
+                .resolve(nombreArchivo)
+                .normalize();
+
+        Files.deleteIfExists(rutaArchivo);
+    }
+
+    // Eliminar un PDF almacenado en Amazon S3
+    public void eliminarDeS3(
+            String eventoId,
+            String usuarioId,
+            String nombreArchivo) {
+
+        String s3Key = eventoId + "/" + usuarioId + "/" + nombreArchivo;
+
+        DeleteObjectRequest deleteRequest = DeleteObjectRequest.builder()
+                .bucket(bucketName)
+                .key(s3Key)
+                .build();
+
+        s3Client.deleteObject(deleteRequest);
     }
 }

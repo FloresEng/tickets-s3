@@ -290,7 +290,44 @@ public class TicketController {
                         e);
         }
         }
+        
+        // Eliminar un ticket y sus archivos asociados
+        @DeleteMapping("/{id}")
+        public ResponseEntity<Void> eliminarTicket(@PathVariable Long id) {
 
+        Ticket ticket = ticketRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Ticket no encontrado"));
+
+        String nombreArchivo = "ticket_" + ticket.getId() + ".pdf";
+
+        try {
+                // Eliminar PDF de EFS
+                storageService.eliminarArchivoEfs(nombreArchivo);
+
+                // Eliminar PDF de S3 si ya fue subido
+                if (ticket.getRutaS3() != null &&
+                        !ticket.getRutaS3().isBlank()) {
+
+                storageService.eliminarDeS3(
+                        ticket.getEvento().getId().toString(),
+                        ticket.getUsuarioId(),
+                        nombreArchivo);
+                }
+
+                // Eliminar registro de MySQL
+                ticketRepository.delete(ticket);
+
+                return ResponseEntity.noContent().build();
+
+        } catch (IOException e) {
+                throw new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Error al eliminar el PDF del ticket en EFS",
+                        e);
+        }
+        }
     
         // Consultar estadísticas de un evento
         @GetMapping("/stats/evento/{eventoId}")
