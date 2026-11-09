@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.File;
@@ -71,5 +72,21 @@ public class StorageService {
         s3Client.putObject(putRequest, archivo.toPath());
 
         return "s3://" + bucketName + "/" + s3Key;
+    }
+
+    // Descarga un PDF desde Amazon S3
+    public byte[] descargarDesdeS3(
+            String eventoId,
+            String usuarioId,
+            String nombreArchivo) {
+
+        String s3Key = eventoId + "/" + usuarioId + "/" + nombreArchivo;
+
+        GetObjectRequest getRequest = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(s3Key)
+                .build();
+
+        return s3Client.getObjectAsBytes(getRequest).asByteArray();
     }
 }

@@ -7,8 +7,11 @@ import com.duoc.tickets_s3.repository.EventoRepository;
 import com.duoc.tickets_s3.repository.TicketRepository;
 import com.duoc.tickets_s3.service.PdfService;
 import com.duoc.tickets_s3.service.StorageService;
+import com.duoc.tickets_s3.service.ZipService;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -16,6 +19,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -26,17 +31,20 @@ public class TicketController {
     private final EventoRepository eventoRepository;
     private final PdfService pdfService;
     private final StorageService storageService;
+    private final ZipService zipService;
 
     public TicketController(
             TicketRepository ticketRepository,
             EventoRepository eventoRepository,
             PdfService pdfService,
-            StorageService storageService) {
+            StorageService storageService,
+            ZipService zipService) {
 
         this.ticketRepository = ticketRepository;
         this.eventoRepository = eventoRepository;
         this.pdfService = pdfService;
         this.storageService = storageService;
+        this.zipService = zipService;
     }
 
     // Generar ticket y guardar PDF temporalmente en EFS
@@ -57,7 +65,7 @@ public class TicketController {
         ticket.setUsuarioId(usuarioId);
         ticket.setTitular(titular);
         ticket.setPrecio(precio);
-        ticket.setEstado("RESERVADO");
+        ticket.setEstado("VENDIDO");
 
         ticket = ticketRepository.save(ticket);
 
@@ -94,7 +102,7 @@ public class TicketController {
 
         File archivo = storageService.obtenerArchivoEfs(nombreArchivo);
 
-        if (!archivo.exists()) {
+        if (!archivo.isFile()) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "No se encontró el PDF del ticket en EFS");
@@ -112,6 +120,88 @@ public class TicketController {
 
         return ResponseEntity.ok(ticket);
     }
+
+    // Descargar los tickets de un usuario en un archivo ZIP
+    @GetMapping("/descargar/usuario/{usuarioId}")
+    public ResponseEntity<byte[]> descargarTicketsUsuario(
+            @PathVariable String usuarioId) {
+
+        List<Ticket> tickets = ticketRepository.findByUsuarioId(usuarioId);
+
+        return generarZip(
+                tickets,
+                "tickets_usuario_" + usuarioId + ".zip");
+        }
+
+   // Descargar los tickets de un evento en un archivo ZIP
+   @GetMapping("/descargar/evento/{eventoId}")
+   public ResponseEntity<byte[]> descargarTicketsEvento(
+           @PathVariable Long eventoId) {
+
+        if (!eventoRepository.existsById(eventoId)) {
+                throw new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Evento no encontrado");
+        }
+
+        List<Ticket> tickets = ticketRepository.findByEventoId(eventoId);
+
+        return generarZip(
+                tickets,
+                "tickets_evento_" + eventoId + ".zip");
+        }
+
+     // Recuperar los PDF desde S3 y generar el archivo ZIP
+     private ResponseEntity<byte[]> generarZip(
+        List<Ticket> tickets,
+        String nombreZip) {
+
+        try {
+        Map<String, byte[]> archivos = new LinkedHashMap<>();
+
+        for (Ticket ticket : tickets) {
+
+            // Solo incluir tickets que ya fueron subidos a S3
+            if (ticket.getRutaS3() == null ||
+                    ticket.getRutaS3().isBlank()) {
+                continue;
+            }
+
+            String nombreArchivo = "ticket_" + ticket.getId() + ".pdf";
+
+            byte[] pdf = storageService.descargarDesdeS3(
+                    ticket.getEvento().getId().toString(),
+                    ticket.getUsuarioId(),
+                    nombreArchivo);
+
+            archivos.put(nombreArchivo, pdf);
+        }
+
+        if (archivos.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "No hay tickets disponibles en S3 para descargar");
+        }
+
+        byte[] zipBytes = zipService.generarZip(archivos);
+
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + nombreZip + "\"")
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .body(zipBytes);
+
+        } catch (ResponseStatusException e) {
+                throw e;
+
+        } catch (Exception e) {
+                throw new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Error al recuperar los tickets desde S3 o generar el ZIP",
+                        e);
+        }
+        }   
 
     // Consultar estadísticas de un evento
     @GetMapping("/stats/evento/{eventoId}")
