@@ -13,18 +13,24 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
-    // consulta para contar la cantidad de reservas por evento
-    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.evento.id = :eventoId")
+    // Contar entradas reservadas por evento
+    @Query("SELECT COUNT(t) FROM Ticket t " +
+           "WHERE t.evento.id = :eventoId AND t.estado = 'RESERVADO'")
     long countReservasByEvento(@Param("eventoId") Long eventoId);
 
-    // consulta sumar las ventas por evento, solo tickets con estado VENDIDO    
+    // Contar entradas vendidas por evento
+    @Query("SELECT COUNT(t) FROM Ticket t " +
+           "WHERE t.evento.id = :eventoId AND t.estado = 'VENDIDO'")
+    long countVentasByEvento(@Param("eventoId") Long eventoId);
+
+    // Sumar los ingresos de las entradas vendidas por evento
     @Query("SELECT COALESCE(SUM(t.precio), 0) FROM Ticket t " +
            "WHERE t.evento.id = :eventoId AND t.estado = 'VENDIDO'")
     Double sumVentasByEvento(@Param("eventoId") Long eventoId);
 
-    // lista de tickets por evento
+    // Listar tickets por evento
     List<Ticket> findByEventoId(Long eventoId);
 
-    // lista de tickets por usuario
+    // Listar tickets por usuario
     List<Ticket> findByUsuarioId(String usuarioId);
 }
