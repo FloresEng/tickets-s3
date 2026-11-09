@@ -8,6 +8,7 @@ import com.duoc.tickets_s3.repository.TicketRepository;
 import com.duoc.tickets_s3.service.PdfService;
 import com.duoc.tickets_s3.service.StorageService;
 import com.duoc.tickets_s3.service.ZipService;
+import com.duoc.tickets_s3.dto.ActualizarTicket;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -217,6 +218,78 @@ public class TicketController {
                         e);
         }
         }   
+
+        
+        // Modificar los datos de un ticket y actualizar sus archivos
+        @PutMapping("/{id}")
+        public ResponseEntity<Ticket> actualizarTicket(
+                @PathVariable Long id,
+                @RequestBody ActualizarTicket request) {
+
+        Ticket ticket = ticketRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Ticket no encontrado"));
+
+        // Validar los datos recibidos
+        if (request.titular() == null || request.titular().isBlank()) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "El titular es obligatorio");
+        }
+
+        if (request.precio() == null || request.precio() <= 0) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "El precio debe ser mayor que cero");
+        }
+
+        if (request.estado() == null ||
+                (!request.estado().equalsIgnoreCase("RESERVADO")
+                && !request.estado().equalsIgnoreCase("VENDIDO"))) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "El estado debe ser RESERVADO o VENDIDO");
+        }
+
+        // Actualizar los datos del ticket
+        ticket.setTitular(request.titular().trim());
+        ticket.setPrecio(request.precio());
+        ticket.setEstado(request.estado().trim().toUpperCase());
+
+        ticket = ticketRepository.save(ticket);
+
+        try {
+                // Regenerar el PDF con los nuevos datos
+                String nombreArchivo = "ticket_" + ticket.getId() + ".pdf";
+
+                byte[] pdfBytes = pdfService.generarTicketPdf(ticket);
+
+                // Actualizar el archivo en EFS
+                File archivo = storageService.guardarEnEfs(
+                        nombreArchivo,
+                        pdfBytes);
+
+                // Si el ticket ya estaba en S3, actualizar también su PDF
+                if (ticket.getRutaS3() != null &&
+                        !ticket.getRutaS3().isBlank()) {
+
+                storageService.subirAS3(
+                        ticket.getEvento().getId().toString(),
+                        ticket.getUsuarioId(),
+                        nombreArchivo,
+                        archivo);
+                }
+
+                return ResponseEntity.ok(ticket);
+
+        } catch (IOException e) {
+                throw new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Error al actualizar el PDF del ticket",
+                        e);
+        }
+        }
 
     
         // Consultar estadísticas de un evento
